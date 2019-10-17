@@ -1,9 +1,7 @@
 import os
-# import xlrd
 import openpyxl
 import sqlite3
 import csv
-import configparser
 import datetime
 import shutil
 
@@ -54,9 +52,6 @@ class Global:
                                 'modified_by', 'modified_on', 'ship_date']
 
     def initialize_config(self):
-        config = configparser.ConfigParser()
-        config.read('config.ini')
-        # self.excel_import_path = config['PATHS']['EXCEL_IMPORT_PATH']
         self.excel_import_path = os.path.join(os.path.curdir, 'downloaded')
         self.letter_merge_path = os.path.join(os.path.curdir, 'letter_merge')
         self.upload_file_path = os.path.join(self.excel_import_path, 'upload')
@@ -138,7 +133,9 @@ def write_letter_merge(fle):
     dt = datetime.datetime.now() + datetime.timedelta(days=2)
     ship_date = datetime.datetime.strftime(dt, '%Y-%m-%d')
 
-    sql = "SELECT * FROM `records` WHERE `export_date` IS NULL AND `filename` = ? AND `kit_code` IS NOT NULL;"
+    sql = ("SELECT * FROM `records` WHERE `export_date` IS NULL "
+           "AND `filename` = ? AND `kit_code` IS NOT NULL ORDER BY `kit_code`;")
+
     cursor.execute(sql, (fle,))
     results = cursor.fetchall()
 
@@ -296,7 +293,7 @@ def main():
     global g
     g = Global()
     g.initialize_config()
-    init_db()
+    # init_db()
 
     leads_files = [f for f in os.listdir(g.excel_import_path) if f[-4:].upper() == 'XLSX']
     for leads in leads_files:

@@ -11,7 +11,13 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
+downloaded/
+reference/
+*.db
+*.sql
+fp/
+print_pdf/
+*.txt
 eggs/
 .eggs/
 lib/
@@ -19,6 +25,7 @@ lib64/
 parts/
 sdist/
 var/
+.idea/
 wheels/
 *.egg-info/
 .installed.cfg

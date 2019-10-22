@@ -4,6 +4,7 @@ import sqlite3
 import csv
 import datetime
 import shutil
+import pyperclip
 
 
 class Global:
@@ -50,6 +51,15 @@ class Global:
                                 'application_url', 'comments', 'vendor_unique_id_lead',
                                 'vendor_unique_id_contact', 'quantity', 'routing',
                                 'modified_by', 'modified_on', 'ship_date']
+
+        self.outside_area_header = ['filename', 'recno', 'collateral_kit_order', 'row_checksum',
+                                    'modified_on_do_not_mod', 'name',
+                                    'created_on', 'created_by', 'owner', 'prospect_or_broker',
+                                    'street_1', 'street_2', 'city', 'full_state', 'zipcode',
+                                    'county', 'state', 'collateral_kit', 'second_kit',
+                                    'application_url', 'comments', 'vendor_unique_id_lead',
+                                    'vendor_unique_id_contact', 'quantity', 'routing',
+                                    'modified_by', 'modified_on', 'ship_date']
 
     def initialize_config(self):
         self.excel_import_path = os.path.join(os.path.curdir, 'downloaded')
@@ -124,14 +134,75 @@ def update_excel_ship_date(fle):
     conn.close()
 
 
+def append_ship_date_to_clipboard(fle):
+    print("Writing ship date to clipboard".format(fle))
+    conn = sqlite3.connect(database=g.database)
+    cursor = conn.cursor()
+
+    sql = ("SELECT count(*) FROM `records` "
+           "WHERE `export_date` IS NULL AND `filename` = ?"
+           "GROUP BY `filename`;")
+    cursor.execute(sql, (fle,))
+    cnt = cursor.fetchone()
+    conn.close()
+
+    dt = datetime.datetime.now() + datetime.timedelta(days=2)
+    ship_date = datetime.datetime.strftime(dt, '%m/%d/%Y')
+
+    clip = (ship_date + "\n") * cnt[0]
+    pyperclip.copy(clip)
+
+
+def write_outside_area_file_all():
+    print("Writing outside area file")
+    conn = sqlite3.connect(database=g.database)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+
+    select_fields = "`" + "`,`".join(g.outside_area_header) + "`"
+
+    sql = f"SELECT {select_fields} FROM `records` WHERE `kit_code` IS NULL;"
+
+    cursor.execute(sql)
+    results = cursor.fetchall()
+
+    with open(os.path.join(g.upload_file_path, "all_outside_area.csv"), 'w+', newline="") as s:
+        csvw = csv.DictWriter(s, g.outside_area_header, delimiter=",", quoting=csv.QUOTE_ALL)
+        csvw.writeheader()
+        for rec in results:
+            csvw.writerow(rec)
+
+    conn.close()
+
+
+def write_outside_area_file(fle):
+    print("Writing outside area file for {}".format(fle))
+    conn = sqlite3.connect(database=g.database)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+
+    select_fields = "`" + "`,`".join(g.outside_area_header) + "`"
+
+    sql = (f"SELECT {select_fields} FROM `records` WHERE `export_date` IS NULL "
+           "AND `filename` = ? AND `kit_code` IS NULL;")
+
+    cursor.execute(sql, (fle,))
+    results = cursor.fetchall()
+
+    with open(os.path.join(g.upload_file_path, "{}_outside_area.csv".format(fle[:-5])), 'w+', newline="") as s:
+        csvw = csv.DictWriter(s, g.outside_area_header, delimiter=",", quoting=csv.QUOTE_ALL)
+        csvw.writeheader()
+        for rec in results:
+            csvw.writerow(rec)
+
+    conn.close()
+
+
 def write_letter_merge(fle):
     print("Writing letter merge for {}".format(fle))
     conn = sqlite3.connect(database=g.database)
     conn.row_factory = dict_factory
     cursor = conn.cursor()
-
-    dt = datetime.datetime.now() + datetime.timedelta(days=2)
-    ship_date = datetime.datetime.strftime(dt, '%Y-%m-%d')
 
     sql = ("SELECT * FROM `records` WHERE `export_date` IS NULL "
            "AND `filename` = ? AND `kit_code` IS NOT NULL ORDER BY `kit_code`;")
@@ -163,14 +234,27 @@ def write_letter_merge(fle):
 
             csvw.writerow(w)
 
-            sql1 = ("UPDATE `records` SET `export_date` = DATETIME('now', 'localtime') "
-                    "WHERE `filename` = ? AND `recno` = ?;")
+    conn.close()
 
-            sql2 = ("UPDATE `records` SET `ship_date` = ? "
-                    "WHERE `filename` = ? AND `recno` = ?;")
 
-            cursor.execute(sql1, (fle, rec['recno'],))
-            cursor.execute(sql2, (ship_date, fle, rec['recno'],))
+def update_dates(fle):
+    conn = sqlite3.connect(database=g.database)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+
+    dt = datetime.datetime.now() + datetime.timedelta(days=2)
+    ship_date = datetime.datetime.strftime(dt, '%Y-%m-%d')
+
+    print("Updating ship and export dates")
+
+    sql1 = ("UPDATE `records` SET `export_date` = DATETIME('now', 'localtime') "
+            "WHERE `filename` = ?;")
+
+    sql2 = ("UPDATE `records` SET `ship_date` = ? "
+            "WHERE `filename` = ?;")
+
+    cursor.execute(sql1, (fle,))
+    cursor.execute(sql2, (ship_date, fle,))
 
     conn.commit()
     conn.close()
@@ -243,6 +327,12 @@ def update_kit_code(fle):
     conn.close()
 
 
+def final_message(fle):
+    print(f"Processing complete for {fle}\nShip date copied to clipboard\n"
+          f"Update {g.upload_file_path}\\{fle}, and upload to Dynamics\n"
+          f"Create pdf letter files for production")
+
+
 def init_db():
 
     conn = sqlite3.connect(database=g.database)
@@ -300,10 +390,14 @@ def main():
         import_leads(leads)
         update_kit_code(leads)
         copy_downloaded_file(leads)
-        update_excel_ship_date(leads)
+        append_ship_date_to_clipboard(leads)
+        # update_excel_ship_date(leads)
         write_count_report(leads)
         write_letter_merge(leads)
+        write_outside_area_file(leads)
+        update_dates(leads)
         move_file_to_complete(leads)
+        final_message(leads)
 
 
 if __name__ == '__main__':

@@ -253,7 +253,10 @@ def write_card_merge(fle):
     cursor.execute(sql, (fle,))
     results = cursor.fetchall()
 
-    with open(os.path.join(g.letter_merge_path, "{}_card merge.txt".format(fle[:-5])), 'w+', newline="") as s:
+    file_date = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d')
+    merge_filename = "34608_Responder Non-Converter mf_{}.txt".format(file_date)
+
+    with open(os.path.join(g.letter_merge_path, merge_filename), 'w+', newline="") as s:
         csvw = csv.DictWriter(s, g.merge_letter_header, delimiter="\t")
         csvw.writeheader()
         for rec in results:

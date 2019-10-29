@@ -199,19 +199,101 @@ def write_outside_area_file(fle):
     conn.close()
 
 
-def write_letter_merge(fle):
+def special_card_merge():
+    print("Writing special card merge")
+    conn = sqlite3.connect(database=g.database)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+
+    sql = ("SELECT * FROM `records` WHERE `collateral_kit` == '2020 AEP Thank You Card' "
+           "AND `kit_code` IS NOT NULL "
+           "AND `filename` != 'FuseBox Collateral Kit Orders 10-29-2019 10-47-56 AM.xlsx' "
+           "ORDER BY `kit_code`;")
+
+    cursor.execute(sql)
+    results = cursor.fetchall()
+
+    with open(os.path.join(g.letter_merge_path, "unsent_card merge.txt"), 'w+', newline="") as s:
+        csvw = csv.DictWriter(s, g.merge_letter_header, delimiter="\t")
+        csvw.writeheader()
+        for rec in results:
+            name = str(rec['name']).strip()
+            name = name.replace('Collateral Order', '').strip().title()
+            w = {'Campaign': '',
+                 'Individual_First_Name_1': name,
+                 'Individual_Last_Name_1': '',
+                 'Individual_First_Name_2': '',
+                 'Individual_Last_Name_2': '',
+                 'Address_1': str(rec['street_1']).title() if rec['street_1'] is not None else '',
+                 'Address_2': str(rec['street_2']).title() if rec['street_2'] is not None else '',
+                 'City': str(rec['city']).title(),
+                 'State': rec['state'],
+                 'Zip': rec['zipcode'],
+                 'County': rec['county'],
+                 'Unique_ID': '',
+                 'mid': '',
+                 'art_code': '',
+                 'kit': 'responder non-converter'}
+
+            csvw.writerow(w)
+
+    conn.close()
+
+
+def write_card_merge(fle):
+    print("Writing card merge for {}".format(fle))
+    conn = sqlite3.connect(database=g.database)
+    conn.row_factory = dict_factory
+    cursor = conn.cursor()
+
+    sql = ("SELECT * FROM `records` WHERE `export_date` IS NULL "
+           "AND `filename` = ? AND `kit_code` IS NOT NULL "
+           "AND `kit_code` = 'responder non-converter' ORDER BY `kit_code`;")
+
+    cursor.execute(sql, (fle,))
+    results = cursor.fetchall()
+
+    with open(os.path.join(g.letter_merge_path, "{}_card merge.txt".format(fle[:-5])), 'w+', newline="") as s:
+        csvw = csv.DictWriter(s, g.merge_letter_header, delimiter="\t")
+        csvw.writeheader()
+        for rec in results:
+            name = str(rec['name']).strip()
+            name = name.replace('Collateral Order', '').strip().title()
+            w = {'Campaign': '',
+                 'Individual_First_Name_1': name,
+                 'Individual_Last_Name_1': '',
+                 'Individual_First_Name_2': '',
+                 'Individual_Last_Name_2': '',
+                 'Address_1': str(rec['street_1']).title() if rec['street_1'] is not None else '',
+                 'Address_2': str(rec['street_2']).title() if rec['street_2'] is not None else '',
+                 'City': str(rec['city']).title(),
+                 'State': rec['state'],
+                 'Zip': rec['zipcode'],
+                 'County': rec['county'],
+                 'Unique_ID': '',
+                 'mid': '',
+                 'art_code': '',
+                 'kit': rec['kit_code']}
+
+            csvw.writerow(w)
+
+    conn.close()
+
+
+def write_kit_merge(fle):
     print("Writing letter merge for {}".format(fle))
     conn = sqlite3.connect(database=g.database)
     conn.row_factory = dict_factory
     cursor = conn.cursor()
 
     sql = ("SELECT * FROM `records` WHERE `export_date` IS NULL "
-           "AND `filename` = ? AND `kit_code` IS NOT NULL ORDER BY `kit_code`;")
+           "AND `filename` = ? AND `kit_code` IS NOT NULL "
+           "AND `kit_code` != 'responder non-converter' ORDER BY `kit_code`;")
 
     cursor.execute(sql, (fle,))
     results = cursor.fetchall()
 
-    with open(os.path.join(g.letter_merge_path, "{}_merge.txt".format(fle[:-5])), 'w+', newline="") as s:
+    with open(os.path.join(g.letter_merge_path, "{}_kit merge.txt".format(fle[:-5])), 'w+', newline="") as s:
         csvw = csv.DictWriter(s, g.merge_letter_header, delimiter="\t")
         csvw.writeheader()
         for rec in results:
@@ -314,15 +396,22 @@ def update_kit_code(fle):
         rec_county = str(result['county']).upper()
         kit_code = None
 
-        if rec_state == 'IA' or rec_state == 'NE':
-            kit_code = g.ia_ne_counties.get(f"{rec_state}_{rec_county}", None)
-        elif rec_state == 'MN':
-            kit_code = g.mn_counties.get(rec_county, None)
+        if result['collateral_kit'] == '2020 AEP Thank You Card':
+            kit_code = 'responder non-converter'
+        else:
+            if rec_state == 'IA' or rec_state == 'NE':
+                kit_code = g.ia_ne_counties.get(f"{rec_state}_{rec_county}", None)
+            elif rec_state == 'MN':
+                kit_code = g.mn_counties.get(rec_county, None)
 
         sql = ("UPDATE `records` SET `kit_code` = ? "
                "WHERE `filename`||`recno` = ?||?;")
 
         cursor.execute(sql, (kit_code, result['filename'], result['recno'],))
+
+        sql = ("UPDATE `records` SET `kit_code` = NULL "
+               "WHERE `city` IS NULL OR `state` IS NULL OR `street_1` IS NULL;")
+        cursor.execute(sql)
 
     conn.commit()
     conn.close()
@@ -392,9 +481,9 @@ def main():
         update_kit_code(leads)
         copy_downloaded_file(leads)
         append_ship_date_to_clipboard(leads)
-        # update_excel_ship_date(leads)
         write_count_report(leads)
-        write_letter_merge(leads)
+        write_kit_merge(leads)
+        write_card_merge(leads)
         write_outside_area_file(leads)
         update_dates(leads)
         move_file_to_complete(leads)

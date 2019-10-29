@@ -149,7 +149,8 @@ def append_ship_date_to_clipboard(fle):
     dt = datetime.datetime.now() + datetime.timedelta(days=2)
     ship_date = datetime.datetime.strftime(dt, '%m/%d/%Y')
 
-    clip = (ship_date + "\n") * cnt[0]
+    clip = (ship_date + "\n") * (cnt[0] - 1)
+    clip = clip + ship_date
     pyperclip.copy(clip)
 
 

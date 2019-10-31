@@ -13,6 +13,7 @@ class Global:
         self.upload_file_path = ""
         self.letter_merge_path = ""
         self.database = 'dynamics-leads.db'
+        self.ship_date = datetime.datetime.now()
 
         self.ia_ne_counties = {'IA_HARRISON': 'OMA', 'IA_MILLS': 'OMA', 'IA_POTTAWATTAMIE': 'OMA',
                                'NE_BUTLER': 'OMA', 'NE_CASS': 'OMA', 'NE_DODGE': 'OMA', 'NE_DOUGLAS': 'OMA',
@@ -65,6 +66,17 @@ class Global:
         self.excel_import_path = os.path.join(os.path.curdir, 'downloaded')
         self.letter_merge_path = os.path.join(os.path.curdir, 'letter_merge')
         self.upload_file_path = os.path.join(self.excel_import_path, 'upload')
+
+    def calculate_ship_date(self, days):
+        """Ship date is [days] from current date"""
+        proc_dt = datetime.datetime.now() + datetime.timedelta(days=days)
+        day_of_week = proc_dt.isoweekday()
+
+        while day_of_week > 5:
+            proc_dt = proc_dt + datetime.timedelta(days=1)
+            day_of_week = proc_dt.isoweekday()
+
+        self.ship_date = datetime.datetime.strftime(proc_dt, '%m/%d/%Y')
 
 
 def dict_factory(cursor, row):
@@ -146,8 +158,7 @@ def append_ship_date_to_clipboard(fle):
     cnt = cursor.fetchone()
     conn.close()
 
-    dt = datetime.datetime.now() + datetime.timedelta(days=2)
-    ship_date = datetime.datetime.strftime(dt, '%m/%d/%Y')
+    ship_date = g.ship_date
 
     clip = (ship_date + "\n") * (cnt[0] - 1)
     clip = clip + ship_date
@@ -328,8 +339,7 @@ def update_dates(fle):
     conn.row_factory = dict_factory
     cursor = conn.cursor()
 
-    dt = datetime.datetime.now() + datetime.timedelta(days=2)
-    ship_date = datetime.datetime.strftime(dt, '%Y-%m-%d')
+    ship_date = g.ship_date
 
     print("Updating ship and export dates")
 
@@ -352,8 +362,7 @@ def write_count_report(fle):
     conn.row_factory = dict_factory
     cursor = conn.cursor()
 
-    dt = datetime.datetime.now() + datetime.timedelta(days=2)
-    ship_date = datetime.datetime.strftime(dt, '%Y-%m-%d')
+    ship_date = g.ship_date
 
     sql = ("SELECT `kit_code`, count(*) 'count' FROM `records` "
            "WHERE `export_date` IS NULL "
@@ -476,6 +485,7 @@ def main():
     global g
     g = Global()
     g.initialize_config()
+    g.calculate_ship_date(2)
     # init_db()
 
     leads_files = [f for f in os.listdir(g.excel_import_path) if f[-4:].upper() == 'XLSX']
